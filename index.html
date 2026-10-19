@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>器具管理システム</title>
+  <!-- Supabase JS Library -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { margin: 0; padding: 12px; background-color: #f4f6f8; color: #333; max-width: 800px; margin-left: auto; margin-right: auto; }
+    h1 { font-size: 18px; text-align: center; margin: 10px 0 15px 0; color: #2c3e50; }
+    
+    .card { background: #fff; padding: 12px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.08); margin-bottom: 12px; }
+    .card-title { font-size: 14px; font-weight: bold; margin-bottom: 8px; color: #555; border-bottom: 1px solid #eee; padding-bottom: 4px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; }
+
+    /* 1. 上段：画像表示エリア */
+    .image-preview-container {
+      width: 100%; height: 220px; border: 2px dashed #ddd; border-radius: 6px;
+      display: flex; align-items: center; justify-content: center; background: #fafafa; overflow: hidden;
+    }
+    .image-preview-container img { max-width: 100%; max-height: 100%; object-fit: contain; }
+
+    /* 2. 中段：入力フォーム / 検索バー */
+    .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+    .form-group { display: flex; flex-direction: column; }
+    .form-group.full-width { grid-column: 1 / -1; }
+    .form-group label { font-size: 11px; font-weight: bold; margin-bottom: 3px; color: #666; }
+    .form-group input, .form-group textarea, .form-group select {
+      padding: 8px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; background: #fff;
+    }
+    
+    /* 検索バーのレイアウト */
+    .search-box-container {
+      display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; background: #f8f9fa; padding: 8px; border-radius: 6px; border: 1px solid #e9ecef;
+    }
+    .search-box-container input { flex: 2; min-width: 160px; padding: 6px 10px; font-size: 13px; border: 1px solid #ced4da; border-radius: 4px; }
+    .search-box-container select { flex: 1; min-width: 110px; padding: 6px 10px; font-size: 13px; border: 1px solid #ced4da; border-radius: 4px; }
+    .search-box-container button { min-width: auto; padding: 6px 12px; font-size: 12px; background: #6c757d; color: white; }
+
+    /* ボタン群 */
+    .button-group { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+    button {
+      flex: 1; min-width: 100px; padding: 10px; border: none; border-radius: 6px;
+      font-size: 13px; font-weight: bold; cursor: pointer; transition: 0.2s;
+    }
+    .btn-add { background: #28a745; color: white; }
+    .btn-update { background: #007bff; color: white; }
+    .btn-clear { background: #6c757d; color: white; }
+    .btn-danger { background: #dc3545; color: white; }
+    .btn-copy { background: #17a2b8; color: white; }
+    .btn-paste { background: #6f42c1; color: white; }
+    .btn-dedup { background: #fd7e14; color: white; }
+    .btn-csv { background: #20c997; color: white; }
+    button:active { opacity: 0.8; transform: scale(0.98); }
+
+    /* 3. 下段：データ一覧表（スクロールエリア） */
+    .table-container {
+      max-height: 350px; overflow-y: auto; overflow-x: auto;
+      border: 1px solid #ddd; border-radius: 6px; background: #fff;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; white-space: nowrap; }
+    th { position: sticky; top: 0; background: #e9ecef; color: #495057; border-bottom: 2px solid #dee2e6; z-index: 1; padding: 8px; text-align: left; }
+    td { padding: 8px; border-bottom: 1px solid #eee; }
+    tr:hover { background: #f1f8ff; cursor: pointer; }
+    tr.selected { background: #d4edda; font-weight: bold; }
+    .count-badge { font-size: 11px; font-weight: normal; color: #666; background: #e9ecef; padding: 2px 6px; border-radius: 10px; }
+
+    /* 貼り付け用モーダル（ポップアップ）モーダルスタイル */
+    .modal-overlay {
+      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;
+    }
+    .modal-content {
+      background: #fff; width: 90%; max-width: 600px; padding: 16px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+    .modal-content textarea {
+      width: 100%; height: 180px; font-family: monospace; font-size: 12px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; margin: 10px 0;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>📦 器具管理システム（デバッグ版）</h1>
+
+  <!-- 1. 上段：画像プレビュー -->
+  <div class="card">
+    <div class="card-title">🖼️ 選択中データの画像</div>
+    <div class="image-preview-container" id="previewContainer">
+      <span style="color:#aaa; font-size:13px;">行を選択すると画像が表示されます</span>
+    </div>
+  </div>
+
+  <!-- 2. 中段：入力 / 編集フォーム -->
+  <div class="card">
+    <div class="card-title">📝 データ入力・編集</div>
+    <form id="itemForm" onsubmit="return false;">
+      <input type="hidden" id="itemId">
+
+      <div class="form-grid">
+        <div class="form-group">
+          <label>管理番号</label>
+          <input type="text" id="serial_number" placeholder="例: EQ-001">
+        </div>
+        <div class="form-group">
+          <label>製品名</label>
+          <input type="text" id="name" placeholder="例: 顕微鏡">
+        </div>
+        <div class="form-group">
+          <label>個数</label>
+          <input type="number" id="quantity" value="1" min="0">
+        </div>
+        <div class="form-group">
+          <label>現在所在地</label>
+          <input type="text" id="location" placeholder="例: 第1実験室">
+        </div>
+        <div class="form-group">
+          <label>状態</label>
+          <input type="text" id="status" placeholder="例: 使用可">
+        </div>
+        <div class="form-group">
+          <label>所有者</label>
+          <input type="text" id="owner" placeholder="例: 開発部">
+        </div>
+        <div class="form-group full-width">
+          <label>備考</label>
+          <textarea id="notes" rows="2" placeholder="メモなど"></textarea>
+        </div>
+        <div class="form-group full-width">
+          <label>画像追加 / 変更</label>
+          <input type="file" id="imageFile" accept="image/*">
+        </div>
+      </div>
+
+      <div class="button-group">
+        <button type="button" class="btn-add" onclick="saveData(false)">➕ 新規追加</button>
+        <button type="button" class="btn-update" id="updateBtn" style="display:none;" onclick="saveData(true)">💾 変更を保存</button>
+        <button type="button" class="btn-clear" onclick="resetForm()">🧹 クリア</button>
+        <button type="button" class="btn-danger" id="deleteBtn" style="display:none;" onclick="deleteItem()">🗑️ 削除</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- 3. 下段：データ一覧表 & 検索絞り込み -->
+  <div class="card">
+    <div class="card-title">
+      <span>📋 登録一覧 <span id="itemCount" class="count-badge">0件</span></span>
+      <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+        <button class="btn-paste" style="padding:4px 8px; font-size:11px;" onclick="openPasteModal()">📥 クリップボードから一括登録</button>
+        <button class="btn-dedup" style="padding:4px 8px; font-size:11px;" onclick="removeDuplicateItems()">🧹 完全重複行を削除</button>
+        <button class="btn-copy" style="padding:4px 8px; font-size:11px;" onclick="copyToClipboard()">📋 Excel用にコピー</button>
+        <button class="btn-csv" style="padding:4px 8px; font-size:11px;" onclick="exportToCSV()">📥 CSV出力</button>
+      </div>
+    </div>
+
+    <!-- 🔍 検索・絞り込みエリア -->
+    <div class="search-box-container">
+      <input type="text" id="searchInput" placeholder="🔍 製品名・番号・場所・備考等で検索..." oninput="filterItems()">
+      <select id="statusFilter" onchange="filterItems()">
+        <option value="">すべての状態</option>
+      </select>
+      <button type="button" onclick="clearSearch()">リセット</button>
+    </div>
+
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>管理番号</th>
+            <th>製品名</th>
+            <th>個数</th>
+            <th>所在地</th>
+            <th>状態</th>
+            <th>所有者</th>
+            <th>備考</th>
+            <th>更新日時</th>
+          </tr>
+        </thead>
+        <tbody id="itemTableBody">
+          <!-- データが動的に描画されます -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 📋 一括登録用ポップアップモーダル -->
+  <div class="modal-overlay" id="pasteModal">
+    <div class="modal-content">
+      <div style="font-weight:bold; font-size:14px;">📥 Excelデータの貼り付け・一括登録</div>
+      <p style="font-size:11px; color:#666; margin:6px 0;">Excelでコピーしたセルデータを以下の枠内に <b>Ctrl + V</b> で貼り付けて、「一括登録を実行」を押してください。</p>
+      <textarea id="pasteTextarea" placeholder="ここにExcelからコピーしたデータを貼り付けてください..."></textarea>
+      <div style="display:flex; gap:8px; justify-content:flex-end;">
+        <button type="button" class="btn-clear" style="flex:none; padding:8px 16px;" onclick="closePasteModal()">キャンセル</button>
+        <button type="button" class="btn-add" style="flex:none; padding:8px 16px;" onclick="processPastedData()">🚀 一括登録を実行</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --------------------------------------------------
+    // 1. Supabase 設定
+    // --------------------------------------------------
+    const SUPABASE_URL = 'https://nwnmlsoyrzewcujlfbhe.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_XwSR8QZ9ow0tQT6EZiwzvw_H2EjgBNq';
+
+    console.log("【デバッグ情報】設定されたSUPABASE_URL:", SUPABASE_URL);
+    console.log("【デバッグ情報】設定されたSUPABASE_KEYの文字数:", SUPABASE_KEY ? SUPABASE_KEY.length : 0);
+    
+    const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    let currentItems = [];    // 全データ
+    let filteredItems = [];   // 絞り込み後のデータ
+
+    // --------------------------------------------------
+    // 2. 初期読み込み
+    // --------------------------------------------------
+    window.onload = () => {
+      console.log("【デバッグ情報】window.onload 発火：データ取得を開始します");
+      loadItems();
+    };
+
+    // データの取得
+    async function loadItems() {
+      console.log("【デバッグ情報】db.from('items').select('*') を実行中...");
+      try {
+        const { data, error } = await db.from('items').select('*').order('id', { ascending: true });
+        
+        if (error) {
+          console.error("【Supabaseエラー】データ取得失敗:", error);
+          alert('【データ取得エラー】\n詳細: ' + error.message);
+          return;
+        }
+
+        console.log("【デバッグ情報】データ取得成功:", data);
+        currentItems = data;
+        updateStatusFilterOptions(data);
+        filterItems(); // 検索・描画を実行
+      } catch (err) {
+        console.error("【ネットワーク/予期せぬエラー】:", err);
+        alert('【通信エラー】Supabaseへの接続に失敗しました。\n詳細: ' + err.message);
+      }
+    }
+
+    // 状態フィルターの選択肢（ドロップダウン）を動的に作成
+    function updateStatusFilterOptions(items) {
+      const select = document.getElementById('statusFilter');
+      const currentValue = select.value;
+      const statuses = [...new Set(items.map(i => i.status).filter(Boolean))];
+      
+      select.innerHTML = '<option value="">すべての状態</option>';
+      statuses.forEach(st => {
+        const option = document.createElement('option');
+        option.value = st;
+        option.textContent = st;
+        select.appendChild(option);
+      });
+      select.value = currentValue;
+    }
+
+    // 🔍 検索・絞り込みフィルタリング処理
+    function filterItems() {
+      const keyword = document.getElementById('searchInput').value.toLowerCase().trim();
+      const selectedStatus = document.getElementById('statusFilter').value;
+
+      filteredItems = currentItems.filter(item => {
+        const matchKeyword = !keyword || [
+          item.serial_number,
+          item.name,
+          item.location,
+          item.owner,
+          item.status,
+          item.notes
+        ].some(val => val && String(val).toLowerCase().includes(keyword));
+
+        const matchStatus = !selectedStatus || item.status === selectedStatus;
+
+        return matchKeyword && matchStatus;
+      });
+
+      renderTable(filteredItems);
+      
+      const countLabel = currentItems.length === filteredItems.length
+        ? `${currentItems.length}件`
+        : `${filteredItems.length} / ${currentItems.length}件`;
+      document.getElementById('itemCount').textContent = countLabel;
+    }
+
+    // 検索リセット
+    function clearSearch() {
+      document.getElementById('searchInput').value = '';
+      document.getElementById('statusFilter').value = '';
+      filterItems();
+    }
+
+    // 表の描画処理
+    function renderTable(items) {
+      const tbody = document.getElementById('itemTableBody');
+      tbody.innerHTML = '';
+
+      if (items.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:#888;">該当するデータがありません。</td></tr>';
+        return;
+      }
+
+      items.forEach(item => {
+        const tr = document.createElement('tr');
+        tr.onclick = () => selectRow(item, tr);
+
+        const updatedDate = item.updated_at ? new Date(item.updated_at).toLocaleString('ja-JP', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' }) : '';
+
+        tr.innerHTML = `
+          <td>${item.id}</td>
+          <td>${item.serial_number || ''}</td>
+          <td>${item.name || ''}</td>
+          <td>${item.quantity ?? 0}</td>
+          <td>${item.location || ''}</td>
+          <td>${item.status || ''}</td>
+          <td>${item.owner || ''}</td>
+          <td>${item.notes || ''}</td>
+          <td>${updatedDate}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // 行選択時の処理
+    function selectRow(item, trElement) {
+      document.querySelectorAll('tbody tr').forEach(r => r.classList.remove('selected'));
+      trElement.classList.add('selected');
+
+      document.getElementById('itemId').value = item.id;
+      document.getElementById('serial_number').value = item.serial_number || '';
+      document.getElementById('name').value = item.name || '';
+      document.getElementById('quantity').value = item.quantity ?? 1;
+      document.getElementById('location').value = item.location || '';
+      document.getElementById('status').value = item.status || '';
+      document.getElementById('owner').value = item.owner || '';
+      document.getElementById('notes').value = item.notes || '';
+      
+      document.getElementById('updateBtn').style.display = 'inline-block';
+      document.getElementById('deleteBtn').style.display = 'inline-block';
+
+      const previewBox = document.getElementById('previewContainer');
+      if (item.image_url) {
+        previewBox.innerHTML = `<img src="${item.image_url}" alt="登録画像">`;
+      } else {
+        previewBox.innerHTML = `<span style="color:#aaa; font-size:13px;">(画像なし)</span>`;
+      }
+    }
+
+    // --------------------------------------------------
+    // 3. データ保存 (新規追加 / 変更保存)
+    // --------------------------------------------------
+    async function saveData(isUpdate) {
+      const id = document.getElementById('itemId').value;
+      const fileInput = document.getElementById('imageFile');
+      let imageUrl = null;
+
+      if (fileInput.files.length > 0) {
+        const file = fileInput.files[0];
+        const fileName = `${Date.now()}_${file.name}`;
+
+        const { data: uploadData, error: uploadError } = await db.storage
+          .from('item-images')
+          .upload(fileName, file);
+
+        if (uploadError) {
+          console.error("【Supabaseエラー】画像保存失敗:", uploadError);
+          alert('【画像保存エラー】: ' + uploadError.message);
+          return;
+        }
+
+        const { data: urlData } = db.storage.from('item-images').getPublicUrl(fileName);
+        imageUrl = urlData.publicUrl;
+      }
+
+      const payload = {
+        serial_number: document.getElementById('serial_number').value,
+        name: document.getElementById('name').value,
+        quantity: parseInt(document.getElementById('quantity').value) || 0,
+        location: document.getElementById('location').value,
+        status: document.getElementById('status').value,
+        owner: document.getElementById('owner').value,
+        notes: document.getElementById('notes').value,
+        updated_at: new Date().toISOString()
+      };
+
+      if (imageUrl) {
+        payload.image_url = imageUrl;
+      }
+
+      if (isUpdate && id) {
+        const { error } = await db.from('items').update(payload).eq('id', id);
+        if (error) {
+          alert('【更新エラー】: ' + error.message);
+          return;
+        }
+      } else {
+        const { error } = await db.from('items').insert([payload]);
+        if (error) {
+          alert('【登録エラー】: ' + error.message);
+          return;
+        }
+      }
+
+      resetForm();
+      loadItems();
+    }
+
+    // 削除処理
+    async function deleteItem() {
+      const id = document.getElementById('itemId').value;
+      if (!id) return;
+
+      if (confirm('この行のデータを削除してもよろしいですか？')) {
+        const { error } = await db.from('items').delete().eq('id', id);
+        if (error) {
+          alert('削除エラー: ' + error.message);
+        } else {
+          resetForm();
+          loadItems();
+        }
+      }
+    }
+
+    // フォームリセット
+    function resetForm() {
+      document.getElementById('itemForm').reset();
+      document.getElementById('itemId').value = '';
+      document.getElementById('updateBtn').style.display = 'none';
+      document.getElementById('deleteBtn').style.display = 'none';
+      document.querySelectorAll('tbody tr').forEach(r => r.classList.remove('selected'));
+      document.getElementById('previewContainer').innerHTML = `<span style="color:#aaa; font-size:13px;">行を選択すると画像が表示されます</span>`;
+    }
+
+    // --------------------------------------------------
+    // 4. 一括登録モーダルの操作
+    // --------------------------------------------------
+    function openPasteModal() {
+      document.getElementById('pasteTextarea').value = '';
+      document.getElementById('pasteModal').style.display = 'flex';
+      setTimeout(() => document.getElementById('pasteTextarea').focus(), 100);
+    }
+
+    function closePasteModal() {
+      document.getElementById('pasteModal').style.display = 'none';
+    }
+
+    // 貼り付けデータの解析と実行
+    async function processPastedData() {
+      const text = document.getElementById('pasteTextarea').value;
+      if (!text || !text.trim()) {
+        alert('貼り付け枠にデータがありません。Excelなどからコピーして貼り付けてください。');
+        return;
+      }
+
+      const lines = text.trim().split(/\r?\n/);
+      const rowsToInsert = [];
+
+      lines.forEach((line) => {
+        const cols = line.split('\t').map(c => c.trim().replace(/^"|"$/g, ''));
+        // ヘッダー行と思われる行は自動スキップ
+        if (cols[0] === 'ID' || cols[0] === '管理番号' || cols[1] === '管理番号') return;
+
+        let serial = '', name = '', qty = 1, loc = '', st = '', owner = '', notes = '';
+
+        if (cols.length >= 7) {
+          const offset = isNaN(Number(cols[0])) ? 0 : (cols.length >= 8 ? 1 : 0);
+          serial = cols[offset] || '';
+          name = cols[offset + 1] || '';
+          qty = parseInt(cols[offset + 2]) || 1;
+          loc = cols[offset + 3] || '';
+          st = cols[offset + 4] || '';
+          owner = cols[offset + 5] || '';
+          notes = cols[offset + 6] || '';
+        } else if (cols.length > 0) {
+          name = cols[0] || '';
+          serial = cols[1] || '';
+        }
+
+        if (serial || name || loc) {
+          rowsToInsert.push({
+            serial_number: serial,
+            name: name,
+            quantity: qty,
+            location: loc,
+            status: st,
+            owner: owner,
+            notes: notes,
+            updated_at: new Date().toISOString()
+          });
+        }
+      });
+
+      if (rowsToInsert.length === 0) {
+        alert('有効なデータ行が見つかりませんでした。');
+        return;
+      }
+
+      const { error } = await db.from('items').insert(rowsToInsert);
+      if (error) {
+        alert('一括登録エラー: ' + error.message);
+      } else {
+        alert(`🎉 ${rowsToInsert.length} 件のデータが一括登録されました！`);
+        closePasteModal();
+        loadItems();
+      }
+    }
+
+    // --------------------------------------------------
+    // 5. 完全重複行の自動削除機能
+    // --------------------------------------------------
+    async function removeDuplicateItems() {
+      if (currentItems.length < 2) {
+        alert('重複チェックに必要なデータ件数が不足しています。');
+        return;
+      }
+
+      const seen = new Map();
+      const duplicateIds = [];
+
+      currentItems.forEach(item => {
+        const key = [
+          item.serial_number || '',
+          item.name || '',
+          item.quantity ?? 0,
+          item.location || '',
+          item.status || '',
+          item.owner || '',
+          item.notes || ''
+        ].join('___');
+
+        if (seen.has(key)) {
+          duplicateIds.push(item.id);
+        } else {
+          seen.set(key, item.id);
+        }
+      });
+
+      if (duplicateIds.length === 0) {
+        alert('完全重複している行データは見つかりませんでした！✨');
+        return;
+      }
+
+      if (confirm(`完全に一致する重複行が ${duplicateIds.length} 件見つかりました。\nこれらを削除しますか？`)) {
+        const { error } = await db.from('items').delete().in('id', duplicateIds);
+        if (error) {
+          alert('重複削除エラー: ' + error.message);
+        } else {
+          alert(`🧹 ${duplicateIds.length} 件の重複行を削除しました！`);
+          loadItems();
+        }
+      }
+    }
+
+    // --------------------------------------------------
+    // 6. Excel用クリップボードコピー
+    // --------------------------------------------------
+    async function copyToClipboard() {
+      const itemsToExport = filteredItems.length > 0 ? filteredItems : currentItems;
+      if (itemsToExport.length === 0) {
+        alert('コピーするデータがありません。');
+        return;
+      }
+
+      const headers = ["ID", "管理番号", "製品名", "個数", "現在所在地", "状態", "所有者", "備考", "画像URL", "更新日時"];
+      let tsvContent = headers.join('\t') + '\n';
+
+      itemsToExport.forEach(item => {
+        const row = [
+          item.id || '',
+          item.serial_number || '',
+          item.name || '',
+          item.quantity ?? 0,
+          item.location || '',
+          item.status || '',
+          item.owner || '',
+          item.notes || '',
+          item.image_url || '',
+          item.updated_at || ''
+        ];
+        tsvContent += row.map(val => String(val).replace(/[\r\n\t]/g, ' ')).join('\t') + '\n';
+      });
+
+      try {
+        await navigator.clipboard.writeText(tsvContent);
+        alert('📋 クリップボードにコピーしました！\nExcelを開いて Ctrl + V で貼り付けてみてください。');
+      } catch (err) {
+        console.error('コピー失敗:', err);
+        alert('コピーに失敗しました: ' + err.message);
+      }
+    }
+
+    // --------------------------------------------------
+    // 7. CSVファイル出力
+    // --------------------------------------------------
+    function exportToCSV() {
+      const itemsToExport = filteredItems.length > 0 ? filteredItems : currentItems;
+      if (itemsToExport.length === 0) {
+        alert('出力対象のデータがありません');
+        return;
+      }
+
+      const headers = ['ID', '管理番号', '製品名', '個数', '現在所在地', '状態', '所有者', '備考', '画像URL', '更新日時'];
+      const rows = itemsToExport.map(item => [
+        item.id,
+        `"${item.serial_number || ''}"`,
+        `"${item.name || ''}"`,
+        item.quantity || 0,
+        `"${item.location || ''}"`,
+        `"${item.status || ''}"`,
+        `"${item.owner || ''}"`,
+        `"${item.notes || ''}"`,
+        `"${item.image_url || ''}"`,
+        `"${item.updated_at || ''}"`
+      ]);
+
+      let csvContent = '\uFEFF' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `器具管理表_${new Date().toISOString().slice(0,10)}.csv`;
+      link.click();
+    }
+  </script>
+</body>
+</html>
