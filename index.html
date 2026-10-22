@@ -261,7 +261,7 @@
     const SUPABASE_URL = 'https://nwnmlsoyrzewcujlfbhe.supabase.co';
     const SUPABASE_KEY = 'sb_publishable_XwSR8QZ9ow0tQT6EZiwzvw_H2EjgBNq';
     
-    // ★ここにあなたの管理者用メールアドレスを設定してください
+    // ★管理者用のメールアドレス
     const ADMIN_EMAIL = 'my-admin-user@item-manager.local'; 
 
     const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -409,10 +409,9 @@
 
       items.forEach(item => {
         const tr = document.createElement('tr');
-        // 管理者の場合のみ行クリックでフォームに読み込む
-        if (isAdmin) {
-          tr.onclick = () => selectRow(item, tr);
-        }
+        // 全員（閲覧者も含む）、行クリックで選択（画像表示）できるようにする
+        tr.onclick = () => selectRow(item, tr);
+
         const updatedDate = item.updated_at ? new Date(item.updated_at).toLocaleString('ja-JP', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' }) : '';
 
         tr.innerHTML = `
@@ -431,27 +430,30 @@
     }
 
     function selectRow(item, trElement) {
-      if (!isAdmin) return;
       document.querySelectorAll('tbody tr').forEach(r => r.classList.remove('selected'));
       trElement.classList.add('selected');
 
-      document.getElementById('itemId').value = item.id;
-      document.getElementById('serial_number').value = item.serial_number || '';
-      document.getElementById('name').value = item.name || '';
-      document.getElementById('quantity').value = item.quantity ?? 1;
-      document.getElementById('location').value = item.location || '';
-      document.getElementById('status').value = item.status || '';
-      document.getElementById('owner').value = item.owner || '';
-      document.getElementById('notes').value = item.notes || '';
-      
-      document.getElementById('updateBtn').style.display = 'inline-block';
-      document.getElementById('deleteBtn').style.display = 'inline-block';
-
+      // 1. 画像プレビューは管理者・閲覧者に関わらず全員表示する
       const previewBox = document.getElementById('previewContainer');
       if (item.image_url) {
         previewBox.innerHTML = `<img src="${item.image_url}" alt="登録画像">`;
       } else {
         previewBox.innerHTML = `<span style="color:#aaa; font-size:13px;">(画像なし)</span>`;
+      }
+
+      // 2. フォームへのデータ埋め込み・ボタン表示は【管理者のみ】実行する
+      if (isAdmin) {
+        document.getElementById('itemId').value = item.id;
+        document.getElementById('serial_number').value = item.serial_number || '';
+        document.getElementById('name').value = item.name || '';
+        document.getElementById('quantity').value = item.quantity ?? 1;
+        document.getElementById('location').value = item.location || '';
+        document.getElementById('status').value = item.status || '';
+        document.getElementById('owner').value = item.owner || '';
+        document.getElementById('notes').value = item.notes || '';
+        
+        document.getElementById('updateBtn').style.display = 'inline-block';
+        document.getElementById('deleteBtn').style.display = 'inline-block';
       }
     }
 
