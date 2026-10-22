@@ -74,6 +74,7 @@
     .btn-paste { background: #6f42c1; color: white; }
     .btn-dedup { background: #fd7e14; color: white; }
     .btn-csv { background: #20c997; color: white; }
+    .btn-range-delete { background: #e83e8c; color: white; } /* 範囲削除ボタン用カラー */
     .btn-logout { background: #6c757d; color: white; flex: none; padding: 6px 12px; font-size: 12px; }
     button:active { opacity: 0.8; transform: scale(0.98); }
 
@@ -89,13 +90,13 @@
     tr.selected { background: #d4edda; font-weight: bold; }
     .count-badge { font-size: 11px; font-weight: normal; color: #666; background: #e9ecef; padding: 2px 6px; border-radius: 10px; }
 
-    /* 貼り付け用モーダル（ポップアップ） */
+    /* モーダル（ポップアップ共通） */
     .modal-overlay {
       display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
       background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;
     }
     .modal-content {
-      background: #fff; width: 90%; max-width: 600px; padding: 16px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      background: #fff; width: 90%; max-width: 500px; padding: 16px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.2);
     }
     .modal-content textarea {
       width: 100%; height: 180px; font-family: monospace; font-size: 12px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; margin: 10px 0;
@@ -201,6 +202,7 @@
         <div id="adminActionButtons" style="display: none; gap: 4px; flex-wrap: wrap;">
           <button class="btn-paste" style="padding:4px 8px; font-size:11px;" onclick="openPasteModal()">📥 クリップボードから一括登録</button>
           <button class="btn-dedup" style="padding:4px 8px; font-size:11px;" onclick="removeDuplicateItems()">🧹 完全重複行を削除</button>
+          <button class="btn-range-delete" style="padding:4px 8px; font-size:11px;" onclick="openRangeDeleteModal()">✂️ ID範囲で一括削除</button>
           <button class="btn-danger" style="padding:4px 8px; font-size:11px;" onclick="deleteSelectedItems()">☑ 選択した行を一括削除</button>
         </div>
         <!-- 閲覧者も使えるボタン群 -->
@@ -223,7 +225,7 @@
         <table>
           <thead>
             <tr>
-              <th id="thCheckbox" style="display:none; width:30px; text-align:center;"><input type="group" id="selectAllCheckbox" onclick="toggleSelectAll(this)"></th>
+              <th id="thCheckbox" style="display:none; width:30px; text-align:center;"><input type="checkbox" id="selectAllCheckbox" onclick="toggleSelectAll(this)"></th>
               <th>ID</th>
               <th>管理番号</th>
               <th>製品名</th>
@@ -252,6 +254,34 @@
       <div style="display:flex; gap:8px; justify-content:flex-end;">
         <button type="button" class="btn-clear" style="flex:none; padding:8px 16px;" onclick="closePasteModal()">キャンセル</button>
         <button type="button" class="btn-add" style="flex:none; padding:8px 16px;" onclick="processPastedData()">🚀 一括登録を実行</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ✂️ ID範囲削除用ポップアップモーダル -->
+  <div class="modal-overlay" id="rangeDeleteModal">
+    <div class="modal-content">
+      <div style="font-weight:bold; font-size:14px; color:#dc3545;">✂️ ID範囲を指定して一括削除</div>
+      <p style="font-size:11px; color:#666; margin:6px 0 12px 0;">削除したいIDの「開始番号」と「終了番号」を入力してください。その範囲内にあるデータが一括で削除されます。</p>
+      
+      <div style="display:flex; gap:10px; margin-bottom:12px;">
+        <div style="flex:1; display:flex; flex-direction:column;">
+          <label style="font-size:11px; font-weight:bold; margin-bottom:4px; color:#555;">開始ID</label>
+          <input type="number" id="rangeStartId" placeholder="例: 50" style="padding:8px; font-size:14px; border:1px solid #ccc; border-radius:4px;" oninput="updateRangePreview()">
+        </div>
+        <div style="flex:1; display:flex; flex-direction:column;">
+          <label style="font-size:11px; font-weight:bold; margin-bottom:4px; color:#555;">終了ID</label>
+          <input type="number" id="rangeEndId" placeholder="例: 60" style="padding:8px; font-size:14px; border:1px solid #ccc; border-radius:4px;" oninput="updateRangePreview()">
+        </div>
+      </div>
+
+      <div id="rangePreviewText" style="font-size:12px; background:#f8f9fa; padding:8px; border-radius:4px; margin-bottom:14px; color:#555;">
+        ID範囲を入力すると、対象の件数がここに表示されます。
+      </div>
+
+      <div style="display:flex; gap:8px; justify-content:flex-end;">
+        <button type="button" class="btn-clear" style="flex:none; padding:8px 16px;" onclick="closeRangeDeleteModal()">キャンセル</button>
+        <button type="button" class="btn-danger" style="flex:none; padding:8px 16px;" onclick="processRangeDelete()">🗑️ 指定範囲のデータを削除</button>
       </div>
     </div>
   </div>
@@ -312,7 +342,6 @@
     }
 
     function checkRoleAndShowApp(email) {
-      // 管理者メールアドレスかどうかを判定
       isAdmin = (email.trim().toLowerCase() === ADMIN_EMAIL.trim().toLowerCase());
 
       document.getElementById('authContainer').style.display = 'none';
@@ -415,9 +444,7 @@
 
       items.forEach(item => {
         const tr = document.createElement('tr');
-        // 行をクリックしたときの処理（フォームへの埋め込み・画像プレビュー）
         tr.onclick = (e) => {
-          // チェックボックスをクリックしたときは行選択のハイライトやフォーム入力を発火させない
           if (e.target.tagName === 'INPUT' && e.target.type === 'checkbox') return;
           selectRow(item, tr);
         };
@@ -444,12 +471,10 @@
         tbody.appendChild(tr);
       });
 
-      // 全選択チェックボックスの状態をリセット
       const selectAll = document.getElementById('selectAllCheckbox');
       if (selectAll) selectAll.checked = false;
     }
 
-    // 全選択/解除の切り替え
     function toggleSelectAll(masterCheckbox) {
       const checkboxes = document.querySelectorAll('.row-checkbox');
       checkboxes.forEach(cb => {
@@ -480,11 +505,72 @@
       }
     }
 
+    // ✂️ ID範囲削除モーダルの制御
+    function openRangeDeleteModal() {
+      if (!isAdmin) return;
+      document.getElementById('rangeStartId').value = '';
+      document.getElementById('rangeEndId').value = '';
+      document.getElementById('rangePreviewText').textContent = 'ID範囲を入力すると、対象の件数がここに表示されます。';
+      document.getElementById('rangeDeleteModal').style.display = 'flex';
+      setTimeout(() => document.getElementById('rangeStartId').focus(), 100);
+    }
+
+    function closeRangeDeleteModal() {
+      document.getElementById('rangeDeleteModal').style.display = 'none';
+    }
+
+    function updateRangePreview() {
+      const start = parseInt(document.getElementById('rangeStartId').value);
+      const end = parseInt(document.getElementById('rangeEndId').value);
+      const previewEl = document.getElementById('rangePreviewText');
+
+      if (isNaN(start) || isNaN(end)) {
+        previewEl.textContent = 'ID範囲を入力すると、対象の件数がここに表示されます。';
+        return;
+      }
+
+      if (start > end) {
+        previewEl.textContent = '⚠️ 開始IDは終了ID以下の値を入力してください。';
+        return;
+      }
+
+      // 現在読み込まれているデータの中から範囲内の件数をカウント
+      const matchingCount = currentItems.filter(item => item.id >= start && item.id <= end).length;
+      previewEl.innerHTML = `対象範囲 <b>ID ${start} 〜 ${end}</b> に含まれるデータ： <b>${matchingCount} 件</b>`;
+    }
+
+    async function processRangeDelete() {
+      if (!isAdmin) return;
+      const start = parseInt(document.getElementById('rangeStartId').value);
+      const end = parseInt(document.getElementById('rangeEndId').value);
+
+      if (isNaN(start) || isNaN(end)) {
+        alert('開始IDと終了IDを正しく入力してください。');
+        return;
+      }
+
+      if (start > end) {
+        alert('開始IDは終了ID以下の値にしてください。');
+        return;
+      }
+
+      if (confirm(`ID 【 ${start} 〜 ${end} 】 の範囲にあるデータを削除してもよろしいですか？`)) {
+        const { error } = await db.from('items').delete().gte('id', start).lte('id', end);
+        if (error) {
+          alert('範囲削除エラー: ' + error.message);
+        } else {
+          alert(`✂️ ID ${start} 〜 ${end} の範囲のデータを削除しました！`);
+          closeRangeDeleteModal();
+          resetForm();
+          loadItems();
+        }
+      }
+    }
+
     function selectRow(item, trElement) {
       document.querySelectorAll('tbody tr').forEach(r => r.classList.remove('selected'));
       trElement.classList.add('selected');
 
-      // 1. 画像プレビューは管理者・閲覧者に関わらず全員表示する
       const previewBox = document.getElementById('previewContainer');
       if (item.image_url) {
         previewBox.innerHTML = `<img src="${item.image_url}" alt="登録画像">`;
@@ -492,7 +578,6 @@
         previewBox.innerHTML = `<span style="color:#aaa; font-size:13px;">(画像なし)</span>`;
       }
 
-      // 2. フォームへのデータ埋め込み・ボタン表示は【管理者のみ】実行する
       if (isAdmin) {
         document.getElementById('itemId').value = item.id;
         document.getElementById('serial_number').value = item.serial_number || '';
