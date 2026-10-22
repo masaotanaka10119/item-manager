@@ -201,6 +201,7 @@
         <div id="adminActionButtons" style="display: none; gap: 4px; flex-wrap: wrap;">
           <button class="btn-paste" style="padding:4px 8px; font-size:11px;" onclick="openPasteModal()">📥 クリップボードから一括登録</button>
           <button class="btn-dedup" style="padding:4px 8px; font-size:11px;" onclick="removeDuplicateItems()">🧹 完全重複行を削除</button>
+          <button class="btn-danger" style="padding:4px 8px; font-size:11px;" onclick="deleteSelectedItems()">☑ 選択した行を一括削除</button>
         </div>
         <!-- 閲覧者も使えるボタン群 -->
         <div style="display: flex; gap: 4px; flex-wrap: wrap;">
@@ -222,6 +223,7 @@
         <table>
           <thead>
             <tr>
+              <th id="thCheckbox" style="display:none; width:30px; text-align:center;"><input type="group" id="selectAllCheckbox" onclick="toggleSelectAll(this)"></th>
               <th>ID</th>
               <th>管理番号</th>
               <th>製品名</th>
@@ -320,17 +322,20 @@
       const badge = document.getElementById('userRoleBadge');
       const adminForm = document.getElementById('adminFormCard');
       const adminButtons = document.getElementById('adminActionButtons');
+      const thCheckbox = document.getElementById('thCheckbox');
 
       if (isAdmin) {
         badge.textContent = '【権限: 管理者】';
         badge.className = 'role-badge role-admin';
         adminForm.style.display = 'block';
         adminButtons.style.display = 'flex';
+        thCheckbox.style.display = 'table-cell';
       } else {
         badge.textContent = '【権限: 閲覧専用】';
         badge.className = 'role-badge role-viewer';
         adminForm.style.display = 'none';
         adminButtons.style.display = 'none';
+        thCheckbox.style.display = 'none';
       }
 
       loadItems();
@@ -403,18 +408,29 @@
       tbody.innerHTML = '';
 
       if (items.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:#888;">該当するデータがありません。</td></tr>';
+        const colSpan = isAdmin ? 10 : 9;
+        tbody.innerHTML = `<tr><td colspan="${colSpan}" style="text-align:center; color:#888;">該当するデータがありません。</td></tr>`;
         return;
       }
 
       items.forEach(item => {
         const tr = document.createElement('tr');
-        // 全員（閲覧者も含む）、行クリックで選択（画像表示）できるようにする
-        tr.onclick = () => selectRow(item, tr);
+        // 行をクリックしたときの処理（フォームへの埋め込み・画像プレビュー）
+        tr.onclick = (e) => {
+          // チェックボックスをクリックしたときは行選択のハイライトやフォーム入力を発火させない
+          if (e.target.tagName === 'INPUT' && e.target.type === 'checkbox') return;
+          selectRow(item, tr);
+        };
 
         const updatedDate = item.updated_at ? new Date(item.updated_at).toLocaleString('ja-JP', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' }) : '';
 
+        let checkboxTdHtml = '';
+        if (isAdmin) {
+          checkboxTdHtml = `<td style="text-align:center;"><input type="checkbox" class="row-checkbox" data-id="${item.id}"></td>`;
+        }
+
         tr.innerHTML = `
+          ${checkboxTdHtml}
           <td>${item.id}</td>
           <td>${item.serial_number || ''}</td>
           <td>${item.name || ''}</td>
@@ -427,6 +443,41 @@
         `;
         tbody.appendChild(tr);
       });
+
+      // 全選択チェックボックスの状態をリセット
+      const selectAll = document.getElementById('selectAllCheckbox');
+      if (selectAll) selectAll.checked = false;
+    }
+
+    // 全選択/解除の切り替え
+    function toggleSelectAll(masterCheckbox) {
+      const checkboxes = document.querySelectorAll('.row-checkbox');
+      checkboxes.forEach(cb => {
+        cb.checked = masterCheckbox.checked;
+      });
+    }
+
+    // 選択行の一括削除機能
+    async function deleteSelectedItems() {
+      if (!isAdmin) return;
+      const checkedBoxes = document.querySelectorAll('.row-checkbox:checked');
+      if (checkedBoxes.length === 0) {
+        alert('削除する行が選択されていません。チェックボックスにチェックを入れてください。');
+        return;
+      }
+
+      const idsToDelete = Array.from(checkedBoxes).map(cb => parseInt(cb.dataset.id));
+
+      if (confirm(`選択された ${idsToDelete.length} 件のデータを削除してもよろしいですか？`)) {
+        const { error } = await db.from('items').delete().in('id', idsToDelete);
+        if (error) {
+          alert('一括削除エラー: ' + error.message);
+        } else {
+          alert(`🗑️ ${idsToDelete.length} 件のデータを削除しました！`);
+          resetForm();
+          loadItems();
+        }
+      }
     }
 
     function selectRow(item, trElement) {
