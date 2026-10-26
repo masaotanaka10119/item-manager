@@ -818,7 +818,7 @@
           `"${(item.location || '').replace(/"/g, '""')}"`,
           `"${(item.status || '').replace(/"/g, '""')}"`,
           `"${(item.owner || '').replace(/"/g, '""')}"`,
-          `"${(item.notes || '').replace(/?/g, '""')}"`,
+          `"${(item.notes || '').replace(/"/g, '""')}"`,
           `"${(item.image_url || '').replace(/"/g, '""')}"`,
           item.updated_at || ''
         ];
