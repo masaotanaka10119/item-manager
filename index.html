@@ -8,7 +8,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-    body { margin: 0; padding: 12px; background-color: #f4f6f8; color: #333; max-width: 800px; margin-left: auto; margin-right: auto; }
+    body { margin: 0; padding: 12px; background-color: #f4f6f8; color: #333; max-width: 900px; margin-left: auto; margin-right: auto; }
     h1 { font-size: 18px; text-align: center; margin: 10px 0 15px 0; color: #2c3e50; }
     
     /* ログイン画面のスタイル */
@@ -74,7 +74,7 @@
     .btn-paste { background: #6f42c1; color: white; }
     .btn-dedup { background: #fd7e14; color: white; }
     .btn-csv { background: #20c997; color: white; }
-    .btn-range-delete { background: #e83e8c; color: white; } /* 範囲削除ボタン用カラー */
+    .btn-range-delete { background: #e83e8c; color: white; }
     .btn-logout { background: #6c757d; color: white; flex: none; padding: 6px 12px; font-size: 12px; }
     button:active { opacity: 0.8; transform: scale(0.98); }
 
@@ -89,8 +89,9 @@
     tr:hover { background: #f1f8ff; cursor: pointer; }
     tr.selected { background: #d4edda; font-weight: bold; }
     .count-badge { font-size: 11px; font-weight: normal; color: #666; background: #e9ecef; padding: 2px 6px; border-radius: 10px; }
+    .url-cell { max-width: 150px; overflow: hidden; text-overflow: ellipsis; color: #666; }
 
-    /* モーダル（ポップアップ共通） */
+    /* モーダル */
     .modal-overlay {
       display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
       background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;
@@ -144,7 +145,7 @@
       </div>
     </div>
 
-    <!-- 2. 中段：入力 / 編集フォーム（管理者のみ表示） -->
+    <!-- 2. 中段：入力 / 編集フォーム -->
     <div class="card" id="adminFormCard" style="display:none;">
       <div class="card-title">📝 データ入力・編集（管理者専用）</div>
       <form id="itemForm" onsubmit="return false;">
@@ -198,14 +199,12 @@
     <div class="card">
       <div class="card-title">
         <span>📋 登録一覧 <span id="itemCount" class="count-badge">0件</span></span>
-        <!-- 管理者専用の操作ボタン群 -->
         <div id="adminActionButtons" style="display: none; gap: 4px; flex-wrap: wrap;">
           <button class="btn-paste" style="padding:4px 8px; font-size:11px;" onclick="openPasteModal()">📥 クリップボードから一括登録</button>
           <button class="btn-dedup" style="padding:4px 8px; font-size:11px;" onclick="removeDuplicateItems()">🧹 完全重複行を削除</button>
           <button class="btn-range-delete" style="padding:4px 8px; font-size:11px;" onclick="openRangeDeleteModal()">✂️ ID範囲で一括削除</button>
           <button class="btn-danger" style="padding:4px 8px; font-size:11px;" onclick="deleteSelectedItems()">☑ 選択した行を一括削除</button>
         </div>
-        <!-- 閲覧者も使えるボタン群 -->
         <div style="display: flex; gap: 4px; flex-wrap: wrap;">
           <button class="btn-copy" style="padding:4px 8px; font-size:11px;" onclick="copyToClipboard()">📋 Excel用にコピー</button>
           <button class="btn-csv" style="padding:4px 8px; font-size:11px;" onclick="exportToCSV()">📥 CSV出力</button>
@@ -221,6 +220,10 @@
         <button type="button" onclick="clearSearch()">リセット</button>
       </div>
 
+      <!-- 
+        ★ 画面の表の並び順（完全一致対応）：
+        [チェック] [ID] [管理番号] [製品名] [個数] [所在地] [状態] [所有者] [備考] [画像URL] [更新日時]
+      -->
       <div class="table-container">
         <table>
           <thead>
@@ -234,6 +237,7 @@
               <th>状態</th>
               <th>所有者</th>
               <th>備考</th>
+              <th>画像URL</th>
               <th>更新日時</th>
             </tr>
           </thead>
@@ -249,7 +253,7 @@
   <div class="modal-overlay" id="pasteModal">
     <div class="modal-content">
       <div style="font-weight:bold; font-size:14px;">📥 Excelデータの貼り付け・一括登録</div>
-      <p style="font-size:11px; color:#666; margin:6px 0;">Excelでコピーしたセルデータを以下の枠内に <b>Ctrl + V</b> で貼り付けて、「一括登録を実行」を押してください。</p>
+      <p style="font-size:11px; color:#666; margin:6px 0;">Excelでコピーしたセルデータを以下の枠内に <b>Ctrl + V</b> で貼り付けて、「一括登録を実行」してください。</p>
       <textarea id="pasteTextarea" placeholder="ここにExcelからコピーしたデータを貼り付けてください..."></textarea>
       <div style="display:flex; gap:8px; justify-content:flex-end;">
         <button type="button" class="btn-clear" style="flex:none; padding:8px 16px;" onclick="closePasteModal()">キャンセル</button>
@@ -262,7 +266,7 @@
   <div class="modal-overlay" id="rangeDeleteModal">
     <div class="modal-content">
       <div style="font-weight:bold; font-size:14px; color:#dc3545;">✂️ ID範囲を指定して一括削除</div>
-      <p style="font-size:11px; color:#666; margin:6px 0 12px 0;">削除したいIDの「開始番号」と「終了番号」を入力してください。その範囲内にあるデータが一括で削除されます。</p>
+      <p style="font-size:11px; color:#666; margin:6px 0 12px 0;">削除したいIDの「開始番号」と「終了番号」を入力してください。</p>
       
       <div style="display:flex; gap:10px; margin-bottom:12px;">
         <div style="flex:1; display:flex; flex-direction:column;">
@@ -287,13 +291,8 @@
   </div>
 
   <script>
-    // --------------------------------------------------
-    // 1. Supabase 設定 & 管理者メールアドレスの設定
-    // --------------------------------------------------
     const SUPABASE_URL = 'https://nwnmlsoyrzewcujlfbhe.supabase.co';
     const SUPABASE_KEY = 'sb_publishable_XwSR8QZ9ow0tQT6EZiwzvw_H2EjgBNq';
-    
-    // ★管理者用のメールアドレス
     const ADMIN_EMAIL = 'my-admin-user@item-manager.local'; 
 
     const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -301,9 +300,6 @@
     let filteredItems = [];
     let isAdmin = false;
 
-    // --------------------------------------------------
-    // 2. 認証チェック・ログイン・ログアウト処理
-    // --------------------------------------------------
     window.onload = async () => {
       const { data: { session } } = await db.auth.getSession();
       if (session) {
@@ -318,16 +314,11 @@
       const email = document.getElementById('loginEmail').value;
       const password = document.getElementById('loginPassword').value;
 
-      const { data, error } = await db.auth.signInWithPassword({
-        email: email,
-        password: password,
-      });
-
+      const { data, error } = await db.auth.signInWithPassword({ email, password });
       if (error) {
         alert('ログイン失敗: ' + error.message);
         return;
       }
-
       checkRoleAndShowApp(data.user.email);
     }
 
@@ -370,18 +361,13 @@
       loadItems();
     }
 
-    // --------------------------------------------------
-    // 3. データ読み込み
-    // --------------------------------------------------
     async function loadItems() {
       try {
         const { data, error } = await db.from('items').select('*').order('id', { ascending: true });
-        
         if (error) {
           alert('【データ取得エラー】\n詳細: ' + error.message);
           return;
         }
-
         currentItems = data;
         updateStatusFilterOptions(data);
         filterItems();
@@ -411,7 +397,7 @@
 
       filteredItems = currentItems.filter(item => {
         const matchKeyword = !keyword || [
-          item.serial_number, item.name, item.location, item.owner, item.status, item.notes
+          item.serial_number, item.name, item.location, item.owner, item.status, item.notes, item.image_url
         ].some(val => val && String(val).toLowerCase().includes(keyword));
 
         const matchStatus = !selectedStatus || item.status === selectedStatus;
@@ -437,7 +423,7 @@
       tbody.innerHTML = '';
 
       if (items.length === 0) {
-        const colSpan = isAdmin ? 10 : 9;
+        const colSpan = isAdmin ? 11 : 10;
         tbody.innerHTML = `<tr><td colspan="${colSpan}" style="text-align:center; color:#888;">該当するデータがありません。</td></tr>`;
         return;
       }
@@ -466,6 +452,7 @@
           <td>${item.status || ''}</td>
           <td>${item.owner || ''}</td>
           <td>${item.notes || ''}</td>
+          <td class="url-cell" title="${item.image_url || ''}">${item.image_url || ''}</td>
           <td>${updatedDate}</td>
         `;
         tbody.appendChild(tr);
@@ -477,22 +464,17 @@
 
     function toggleSelectAll(masterCheckbox) {
       const checkboxes = document.querySelectorAll('.row-checkbox');
-      checkboxes.forEach(cb => {
-        cb.checked = masterCheckbox.checked;
-      });
+      checkboxes.forEach(cb => { cb.checked = masterCheckbox.checked; });
     }
 
-    // 選択行の一括削除機能
     async function deleteSelectedItems() {
       if (!isAdmin) return;
       const checkedBoxes = document.querySelectorAll('.row-checkbox:checked');
       if (checkedBoxes.length === 0) {
-        alert('削除する行が選択されていません。チェックボックスにチェックを入れてください。');
+        alert('削除する行が選択されていません。');
         return;
       }
-
       const idsToDelete = Array.from(checkedBoxes).map(cb => parseInt(cb.dataset.id));
-
       if (confirm(`選択された ${idsToDelete.length} 件のデータを削除してもよろしいですか？`)) {
         const { error } = await db.from('items').delete().in('id', idsToDelete);
         if (error) {
@@ -505,7 +487,6 @@
       }
     }
 
-    // ✂️ ID範囲削除モーダルの制御
     function openRangeDeleteModal() {
       if (!isAdmin) return;
       document.getElementById('rangeStartId').value = '';
@@ -528,13 +509,10 @@
         previewEl.textContent = 'ID範囲を入力すると、対象の件数がここに表示されます。';
         return;
       }
-
       if (start > end) {
         previewEl.textContent = '⚠️ 開始IDは終了ID以下の値を入力してください。';
         return;
       }
-
-      // 現在読み込まれているデータの中から範囲内の件数をカウント
       const matchingCount = currentItems.filter(item => item.id >= start && item.id <= end).length;
       previewEl.innerHTML = `対象範囲 <b>ID ${start} 〜 ${end}</b> に含まれるデータ： <b>${matchingCount} 件</b>`;
     }
@@ -544,13 +522,8 @@
       const start = parseInt(document.getElementById('rangeStartId').value);
       const end = parseInt(document.getElementById('rangeEndId').value);
 
-      if (isNaN(start) || isNaN(end)) {
-        alert('開始IDと終了IDを正しく入力してください。');
-        return;
-      }
-
-      if (start > end) {
-        alert('開始IDは終了ID以下の値にしてください。');
+      if (isNaN(start) || isNaN(end) || start > end) {
+        alert('ID範囲を正しく入力してください。');
         return;
       }
 
@@ -603,10 +576,7 @@
         const file = fileInput.files[0];
         const fileName = `${Date.now()}_${file.name}`;
 
-        const { data: uploadData, error: uploadError } = await db.storage
-          .from('item-images')
-          .upload(fileName, file);
-
+        const { error: uploadError } = await db.storage.from('item-images').upload(fileName, file);
         if (uploadError) {
           alert('【画像保存エラー】: ' + uploadError.message);
           return;
@@ -678,6 +648,7 @@
       document.getElementById('pasteModal').style.display = 'none';
     }
 
+    // 📥 クリップボードからのデータ解析・一括登録（列順完全一致 & URL安全チェック版）
     async function processPastedData() {
       if (!isAdmin) return;
       const text = document.getElementById('pasteTextarea').value;
@@ -691,11 +662,31 @@
 
       lines.forEach((line) => {
         const cols = line.split('\t').map(c => c.trim().replace(/^"|"$/g, ''));
+        
+        // ヘッダー行はスキップ
         if (cols[0] === 'ID' || cols[0] === '管理番号' || cols[1] === '管理番号') return;
 
-        let serial = '', name = '', qty = 1, loc = '', st = '', owner = '', notes = '';
-        if (cols.length >= 7) {
-          const offset = isNaN(Number(cols[0])) ? 0 : (cols.length >= 8 ? 1 : 0);
+        let serial = '', name = '', qty = 1, loc = '', st = '', owner = '', notes = '', imgUrl = '';
+        
+        /*
+          【列の順番（完全一致対応）】
+          Excel用にコピーした際の出力順:
+          0: ID (新規登録時は無視または自動採番)
+          1: 管理番号
+          2: 製品名
+          3: 個数
+          4: 所在地
+          5: 状態
+          6: 所有者
+          7: 備考
+          8: 画像URL
+          9: 更新日時 (新規登録時は自動生成)
+        */
+        if (cols.length >= 9) {
+          // 先頭がID数字かどうかでオフセットを自動調整
+          const hasId = !isNaN(Number(cols[0]));
+          const offset = hasId ? 1 : 0;
+
           serial = cols[offset] || '';
           name = cols[offset + 1] || '';
           qty = parseInt(cols[offset + 2]) || 1;
@@ -703,14 +694,29 @@
           st = cols[offset + 4] || '';
           owner = cols[offset + 5] || '';
           notes = cols[offset + 6] || '';
+          
+          let rawUrl = cols[offset + 7] || '';
+          // ★URLの安全チェック：ちゃんと "http" から始まっている場合のみ画像URLとして採用する
+          if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) {
+            imgUrl = rawUrl;
+          }
         } else if (cols.length > 0) {
+          // 簡易形式（製品名、管理番号のみなど）のフォールバック
           name = cols[0] || '';
           serial = cols[1] || '';
         }
 
         if (serial || name || loc) {
           rowsToInsert.push({
-            serial_number: serial, name: name, quantity: qty, location: loc, status: st, owner: owner, notes: notes, updated_at: new Date().toISOString()
+            serial_number: serial,
+            name: name,
+            quantity: qty,
+            location: loc,
+            status: st,
+            owner: owner,
+            notes: notes,
+            image_url: imgUrl || null,
+            updated_at: new Date().toISOString()
           });
         }
       });
@@ -742,7 +748,7 @@
 
       currentItems.forEach(item => {
         const key = [
-          item.serial_number || '', item.name || '', item.quantity ?? 0, item.location || '', item.status || '', item.owner || '', item.notes || ''
+          item.serial_number || '', item.name || '', item.quantity ?? 0, item.location || '', item.status || '', item.owner || '', item.notes || '', item.image_url || ''
         ].join('___');
 
         if (seen.has(key)) {
@@ -757,7 +763,7 @@
         return;
       }
 
-      if (confirm(`完全に一致する重複行が ${duplicateIds.length} 件見つかりました。\nこれらを削除しますか？`)) {
+      if (confirm(`完全に一致する重複行が ${duplicateIds.length} 件見つかりました。削除しますか？`)) {
         const { error } = await db.from('items').delete().in('id', duplicateIds);
         if (error) {
           alert('重複削除エラー: ' + error.message);
@@ -796,21 +802,38 @@
     function exportToCSV() {
       const itemsToExport = filteredItems.length > 0 ? filteredItems : currentItems;
       if (itemsToExport.length === 0) {
-        alert('出力対象のデータがありません');
+        alert('出力対象のデータがありません。');
         return;
       }
 
-      const headers = ['ID', '管理番号', '製品名', '個数', '現在所在地', '状態', '所有者', '備考', '画像URL', '更新日時'];
-      const rows = itemsToExport.map(item => [
-        item.id, `"${item.serial_number || ''}"`, `"${item.name || ''}"`, item.quantity || 0, `"${item.location || ''}"`, `"${item.status || ''}"`, `"${item.owner || ''}"`, `"${item.notes || ''}"`, `"${item.image_url || ''}"`, `"${item.updated_at || ''}"`
-      ]);
+      const headers = ["ID", "管理番号", "製品名", "個数", "現在所在地", "状態", "所有者", "備考", "画像URL", "更新日時"];
+      let csvContent = '\uFEFF' + headers.join(',') + '\n';
 
-      let csvContent = '\uFEFF' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+      itemsToExport.forEach(item => {
+        const row = [
+          item.id || '',
+          `"${(item.serial_number || '').replace(/"/g, '""')}"`,
+          `"${(item.name || '').replace(/"/g, '""')}"`,
+          item.quantity ?? 0,
+          `"${(item.location || '').replace(/"/g, '""')}"`,
+          `"${(item.status || '').replace(/"/g, '""')}"`,
+          `"${(item.owner || '').replace(/"/g, '""')}"`,
+          `"${(item.notes || '').replace(/?/g, '""')}"`,
+          `"${(item.image_url || '').replace(/"/g, '""')}"`,
+          item.updated_at || ''
+        ];
+        csvContent += row.join(',') + '\n';
+      });
+
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = `器具管理表_${new Date().toISOString().slice(0,10)}.csv`;
-      link.click();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `inventory_export_${new Date().toISOString().slice(0,10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     }
   </script>
 </body>
